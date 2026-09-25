@@ -19,8 +19,6 @@ type PageData struct {
 
 func main() {
 	var Messages []string
-	Messages = append(Messages, "first")
-	Messages = append(Messages, "second")
 	r := mux.NewRouter()
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		tmpl, err := template.ParseFS(templatesFS, "templates/index.html")

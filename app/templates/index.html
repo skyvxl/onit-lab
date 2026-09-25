@@ -260,11 +260,13 @@
     </label>
     <button>Отправить</button>
 </form>
+{{if .Messages}}
 <ul>
     {{range .Messages}}
     <li>{{.}}</li>
     {{end}}
 </ul>
+{{end}}
 </body>
 <script>
     const form = document.querySelector('form');
@@ -280,7 +282,12 @@
         })
             .then(response => response.json())
             .then(data => {
-                const ul = document.querySelector('ul');
+                let ul = document.querySelector('ul');
+                if (!ul) {
+                    const newUl = document.createElement('ul');
+                    document.body.appendChild(newUl);
+                    ul = newUl;
+                }
                 const li = document.createElement('li');
                 li.textContent = data.message;
                 ul.appendChild(li);
