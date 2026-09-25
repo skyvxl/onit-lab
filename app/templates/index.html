@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{.Title}}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            color-scheme: dark;
+
+            --bg: #101013;
+            --surface: #151519;
+            --border: #2a2a31;
+            --text: #e4e4e9;
+            --muted: #92929e;
+            --mono: "JetBrains Mono", monospace;
+
+            /* Общий масштаб: 16px на узком окне, 40px на 2560px. */
+            font-size: clamp(16px, 1.5625vw, 40px);
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            min-height: 100%;
+            padding-inline: 1.25rem;
+            background: var(--bg);
+        }
+
+        body {
+            width: 100%;
+            max-width: 45rem;
+            min-height: 100vh;
+            margin-inline: auto;
+            padding: 4.5rem 2.25rem;
+            border-inline: 1px solid var(--border);
+
+            background-image: linear-gradient(#ffffff03 1px, transparent 1px),
+            linear-gradient(90deg, #ffffff03 1px, transparent 1px);
+            background-size: 1.75rem 1.75rem;
+
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 0.8125rem;
+            font-weight: 400;
+            line-height: 1.65;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        ::selection {
+            background: #3154ad;
+            color: #fff;
+        }
+
+        h1 {
+            margin-bottom: 1.5rem;
+            font-size: 1.625rem;
+            font-weight: 500;
+            line-height: 1.2;
+            letter-spacing: -0.04em;
+        }
+
+        form {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.625rem;
+            margin-bottom: 2rem;
+        }
+
+        label {
+            display: block;
+            flex: 1;
+            min-width: 0;
+        }
+
+        input,
+        button {
+            height: 2.25rem;
+            border-radius: 0.1875rem;
+            font-family: var(--mono);
+            font-size: 0.75rem;
+            font-weight: 400;
+            transition: background-color 120ms ease,
+            border-color 120ms ease,
+            box-shadow 120ms ease;
+        }
+
+        input {
+            display: block;
+            width: 100%;
+            padding-inline: 0.6875rem;
+            border: 1px solid #34343d;
+            outline: none;
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: inset 0 1px 2px #00000020;
+        }
+
+        input::placeholder {
+            color: var(--muted);
+            opacity: 1;
+        }
+
+        input:hover {
+            border-color: #494953;
+        }
+
+        input:focus {
+            border-color: #6586ff;
+            box-shadow: 0 0 0 2px #2450e525;
+        }
+
+        button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            flex-shrink: 0;
+            padding: 0 0.6875rem 0.125rem;
+            border: 1px solid #2854df;
+            background: #1d4be0;
+            color: #fff;
+            line-height: 1;
+            white-space: nowrap;
+            box-shadow: inset 0 -0.125rem 0 #173bb0,
+            inset 0 -0.1875rem 0 #ffffff18;
+            cursor: pointer;
+        }
+
+        button::after {
+            content: "";
+            flex-shrink: 0;
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 1px solid #ffffff30;
+            border-radius: 0.125rem;
+            background-color: #ffffff0d;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e0e7ff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17 17 7M7 7h10v10'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: 0.875rem 0.875rem;
+        }
+
+        button:hover {
+            border-color: #4169ef;
+            background-color: #2857e8;
+        }
+
+        button:active {
+            background-color: #1942c6;
+            box-shadow: inset 0 2px 3px #00000025;
+        }
+
+        button:focus-visible {
+            outline: 2px solid #8da5ff;
+            outline-offset: 4px;
+        }
+
+        ul {
+            list-style: none;
+            counter-reset: messages;
+            border: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        ul:not(:has(li)) {
+            display: none;
+        }
+
+        li {
+            display: grid;
+            grid-template-columns: 1.5rem minmax(0, 1fr);
+            align-items: baseline;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            counter-increment: messages;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+        }
+
+        li + li {
+            border-top: 1px solid var(--border);
+        }
+
+        li::before {
+            content: counter(messages, decimal-leading-zero);
+            color: var(--muted);
+            font-size: 0.6875rem;
+            white-space: normal;
+        }
+
+        li:hover {
+            background: #1b1b21;
+        }
+
+        @media (max-width: 600px) {
+            html {
+                padding-inline: 0.75rem;
+            }
+
+            body {
+                padding: 2.5rem 1rem;
+            }
+
+            h1 {
+                font-size: 1.375rem;
+            }
+
+            form {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.75rem;
+            }
+
+            label {
+                width: 100%;
+            }
+
+            input,
+            button {
+                height: 2.75rem;
+            }
+
+            input {
+                font-size: 1rem;
+            }
+
+            button {
+                align-self: flex-start;
+                font-size: 0.875rem;
+            }
+
+            li {
+                padding: 0.75rem;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            input,
+            button {
+                transition: none;
+            }
+        }
+    </style>
+</head>
+<body>
+<h1>Гостевая книга</h1>
+<form action="/messages" method="post">
+    <label>
+        <input type="text" name="message" placeholder="Ваше сообщение" required>
+    </label>
+    <button>Отправить</button>
+</form>
+<ul>
+    {{range .Messages}}
+    <li>{{.}}</li>
+    {{end}}
+</ul>
+</body>
+<script>
+    const form = document.querySelector('form');
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        fetch('/messages', {
+            method: 'post',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({message: form.message.value})
+        })
+            .then(response => response.json())
+            .then(data => {
+                const ul = document.querySelector('ul');
+                const li = document.createElement('li');
+                li.textContent = data.message;
+                ul.appendChild(li);
+                form.reset();
+            })
+            .catch(error => console.error('Error:', error));
+    })
+</script>
+</html>
