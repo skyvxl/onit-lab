@@ -1,16 +1,12 @@
 package main
 
 import (
-	"embed"
 	"encoding/json"
 	"html/template"
 	"net/http"
 
 	"github.com/gorilla/mux"
 )
-
-//go:embed templates/*
-var templatesFS embed.FS
 
 type PageData struct {
 	Title    string
@@ -21,7 +17,7 @@ func main() {
 	var Messages []string
 	r := mux.NewRouter()
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		tmpl, err := template.ParseFS(templatesFS, "templates/index.html")
+		tmpl, err := template.ParseFiles("web/templates/index.html")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
