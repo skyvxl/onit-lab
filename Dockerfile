@@ -9,5 +9,6 @@ FROM alpine:3.24
 WORKDIR /app
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /app/main .
+COPY --from=builder /app/web/templates ./web/templates
 EXPOSE 8080
 ENTRYPOINT ["/app/main"]

@@ -1,12 +1,15 @@
-.PHONY: all build run fmt lint
+.PHONY: all build run run-dev fmt lint
 
-all: build
+all: run-dev
 
 build:
 	go build -o bin/server cmd/server/main.go
 
 run:
 	./bin/server
+
+run-dev:
+	go run cmd/server/main.go
 
 fmt:
 	go fmt ./...
