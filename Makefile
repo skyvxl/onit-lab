@@ -1,4 +1,5 @@
-.PHONY: all build run run-dev fmt lint
+-include .env
+export
 
 all: run-dev
 
@@ -16,3 +17,8 @@ fmt:
 
 lint:
 	golangci-lint run
+
+test:
+	go test ./...
+
+.PHONY: all build run run-dev fmt lint

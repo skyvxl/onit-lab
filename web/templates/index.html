@@ -260,6 +260,7 @@
     </label>
     <button>Отправить</button>
 </form>
+<p id="form-status" role="status" aria-live="polite"></p>
 {{if .Messages}}
 <ul>
     {{range .Messages}}
@@ -267,33 +268,36 @@
     {{end}}
 </ul>
 {{end}}
-</body>
 <script>
     const form = document.querySelector('form');
-    form.addEventListener('submit', (e) => {
+    const status = document.querySelector('#form-status');
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        fetch('/messages', {
-            method: 'post',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-            },
-            body: JSON.stringify({message: form.message.value})
-        })
-            .then(response => response.json())
-            .then(data => {
-                let ul = document.querySelector('ul');
-                if (!ul) {
-                    const newUl = document.createElement('ul');
-                    document.body.appendChild(newUl);
-                    ul = newUl;
-                }
-                const li = document.createElement('li');
-                li.textContent = data.message;
-                ul.appendChild(li);
-                form.reset();
-            })
-            .catch(error => console.error('Error:', error));
-    })
+        status.textContent = '';
+        try {
+            const response = await fetch('/messages', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: form.elements.namedItem('message').value})
+            });
+            if (!response.ok) {
+                status.textContent = (await response.text()).trim();
+                return;
+            }
+            const data = await response.json();
+            let ul = document.querySelector('ul');
+            if (!ul) {
+                ul = document.createElement('ul');
+                status.after(ul);
+            }
+            const li = document.createElement('li');
+            li.textContent = data.message;
+            ul.prepend(li);
+            form.reset();
+        } catch (error) {
+            status.textContent = 'Не удалось отправить сообщение. Попробуйте ещё раз.';
+        }
+    });
 </script>
+</body>
 </html>

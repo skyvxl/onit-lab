@@ -1,0 +1,92 @@
+version: "2"
+
+sql:
+  - engine: "postgresql"
+    queries: "internal/db/queries.sql"
+    schema: "internal/db/migrations"
+    gen:
+      go:
+        package: "db"
+        out: "internal/db"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_interface: true
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
+        overrides:
+          # Date not nullable
+          - db_type: "date"
+            go_type: "time.Time"
+
+          # Date nullable
+          - db_type: "date"
+            nullable: true
+            go_type:
+              type: "time.Time"
+              pointer: true
+
+          # Timestamp not nullable
+          - db_type: "timestamp"
+            go_type: "time.Time"
+
+          # Timestamp nullable
+          - db_type: "timestamp"
+            nullable: true
+            go_type:
+              type: "time.Time"
+              pointer: true
+
+          # Timestamptz not nullable
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+
+          # Timestamptz nullable
+          - db_type: "timestamptz"
+            nullable: true
+            go_type:
+              type: "time.Time"
+              pointer: true
+
+          # Text not nullable
+          - db_type: "text"
+            go_type: "string"
+
+          # Text nullable
+          - db_type: "text"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true
+
+          # Varchar not nullable
+          - db_type: "varchar"
+            go_type: "string"
+
+          # Varchar nullable
+          - db_type: "varchar"
+            nullable: true
+            go_type:
+              type: "string"
+              pointer: true
+
+          # UUID not nullable
+          - db_type: "uuid"
+            go_type:
+              import: "uuid"
+              type: "UUID"
+
+          # UUID nullable
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              import: "uuid"
+              type: "UUID"
+              pointer: true
+
+          # Integer -> int (вместо int32)
+          - db_type: "integer"
+            go_type: "int"
+
+          # Double precision -> float64 (вместо float32/pgtype)
+          - db_type: "double precision"
+            go_type: "float64"

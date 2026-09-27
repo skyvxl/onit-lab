@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
+	"onit_laba1/internal/datasource"
 	"onit_laba1/internal/web"
 )
 
@@ -15,17 +18,31 @@ type app struct {
 	ctx    context.Context
 	logger *slog.Logger
 	server *http.Server
+	repo   *datasource.Repository
 }
 
-func NewApp(ctx context.Context, logger *slog.Logger) *app {
+func NewApp(ctx context.Context, logger *slog.Logger) (*app, error) {
+	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if databaseURL == "" {
+		return nil, errors.New("DATABASE_URL is required")
+	}
+	initCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	pool, err := datasource.NewPool(initCtx, databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("initialize database: %w", err)
+	}
+	repo := datasource.NewRepository(pool)
 	return &app{
 		ctx:    ctx,
 		logger: logger,
-		server: web.NewServer(logger),
-	}
+		server: web.NewServer(logger, repo),
+		repo:   repo,
+	}, nil
 }
 
 func (a *app) Run() error {
+	defer a.repo.Close()
 	return a.runHTTPServer()
 }
 

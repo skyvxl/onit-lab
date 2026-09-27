@@ -2,16 +2,22 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"html/template"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
 )
+
+type MessageRepository interface {
+	GetMessages(context.Context) ([]string, error)
+	CreateMessage(context.Context, string) error
+}
 
 type PageData struct {
 	Title    string
@@ -19,16 +25,19 @@ type PageData struct {
 }
 
 type guestbook struct {
-	logger   *slog.Logger
-	mu       sync.RWMutex
-	messages []string
+	logger *slog.Logger
+	repo   MessageRepository
 }
 
-func NewServer(logger *slog.Logger) *http.Server {
+func NewServer(logger *slog.Logger, repo MessageRepository) *http.Server {
 	r := mux.NewRouter()
-	RegisterRoutes(r, logger)
+	RegisterRoutes(r, logger, repo)
+	port := os.Getenv("SERVER_PORT")
+	if port == "" {
+		port = "8080"
+	}
 	return &http.Server{
-		Addr:              ":8080",
+		Addr:              ":" + port,
 		Handler:           r,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       5 * time.Second,
@@ -37,8 +46,8 @@ func NewServer(logger *slog.Logger) *http.Server {
 	}
 }
 
-func RegisterRoutes(r *mux.Router, logger *slog.Logger) {
-	book := &guestbook{logger: logger}
+func RegisterRoutes(r *mux.Router, logger *slog.Logger, repo MessageRepository) {
+	book := &guestbook{logger: logger, repo: repo}
 	r.HandleFunc("/", book.homeHandler).Methods(http.MethodGet)
 	r.HandleFunc("/messages", book.messagesHandler).Methods(http.MethodPost)
 }
@@ -50,9 +59,12 @@ func (book *guestbook) homeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "не удалось открыть страницу", http.StatusInternalServerError)
 		return
 	}
-	book.mu.RLock()
-	messages := append([]string(nil), book.messages...)
-	book.mu.RUnlock()
+	messages, err := book.repo.GetMessages(r.Context())
+	if err != nil {
+		book.logger.ErrorContext(r.Context(), "get messages failed", "error", err)
+		http.Error(w, "не удалось открыть страницу", http.StatusInternalServerError)
+		return
+	}
 	data := PageData{
 		Title:    "Гостевая книга",
 		Messages: messages,
@@ -84,15 +96,16 @@ func (book *guestbook) messagesHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "сообщение пустое", http.StatusBadRequest)
 		return
 	}
-	book.mu.Lock()
-	book.messages = append(book.messages, request.Message)
-	book.mu.Unlock()
+	err = book.repo.CreateMessage(r.Context(), request.Message)
+	if err != nil {
+		book.logger.ErrorContext(r.Context(), "create message failed", "error", err)
+		http.Error(w, "не удалось сохранить сообщение", http.StatusInternalServerError)
+		return
+	}
 	book.logger.InfoContext(r.Context(), "message added")
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(map[string]string{
-		"message": request.Message,
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]string{"message": request.Message}); err != nil {
 		book.logger.WarnContext(r.Context(), "write response failed", "error", err)
 	}
 }
