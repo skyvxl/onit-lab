@@ -21,4 +21,10 @@ lint:
 test:
 	go test ./...
 
-.PHONY: all build run run-dev fmt lint
+migrate-up:
+	docker compose run --build --rm migrate up
+
+migrate-down:
+	docker compose run --build --rm migrate down
+
+.PHONY: all build run run-dev fmt lint test migrate-up migrate-down
