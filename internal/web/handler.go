@@ -8,15 +8,24 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type MessageRepository interface {
 	GetMessages(context.Context) ([]string, error)
 	CreateMessage(context.Context, string) error
+}
+
+type responseWriterWrapper struct {
+	http.ResponseWriter
+	statusCode int
 }
 
 type PageData struct {
@@ -29,9 +38,9 @@ type guestbook struct {
 	repo   MessageRepository
 }
 
-func NewServer(logger *slog.Logger, repo MessageRepository) *http.Server {
+func NewServer(logger *slog.Logger, repo MessageRepository, reg *prometheus.Registry) *http.Server {
 	r := mux.NewRouter()
-	RegisterRoutes(r, logger, repo)
+	RegisterRoutes(r, logger, repo, reg)
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
 		port = "8080"
@@ -46,10 +55,53 @@ func NewServer(logger *slog.Logger, repo MessageRepository) *http.Server {
 	}
 }
 
-func RegisterRoutes(r *mux.Router, logger *slog.Logger, repo MessageRepository) {
-	book := &guestbook{logger: logger, repo: repo}
-	r.HandleFunc("/", book.homeHandler).Methods(http.MethodGet)
-	r.HandleFunc("/messages", book.messagesHandler).Methods(http.MethodPost)
+func RegisterRoutes(r *mux.Router, logger *slog.Logger, repo MessageRepository, reg *prometheus.Registry) {
+	factory := promauto.With(reg)
+	requestsIn := factory.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests.",
+		},
+		[]string{"path", "method", "status"},
+	)
+	requestDuration := factory.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "http_request_duration_seconds",
+			Help: "Duration of HTTP requests in seconds.",
+		},
+		[]string{"path", "method", "status"},
+	)
+	book := &guestbook{
+		logger: logger,
+		repo:   repo,
+	}
+	apiRouter := r.NewRoute().Subrouter()
+	apiRouter.Use(metricsMiddleware(requestsIn, requestDuration))
+	apiRouter.HandleFunc("/", book.homeHandler).Methods(http.MethodGet)
+	apiRouter.HandleFunc("/messages", book.messagesHandler).Methods(http.MethodPost)
+	r.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+}
+
+func metricsMiddleware(requestsIn *prometheus.CounterVec, requestDuration *prometheus.HistogramVec) mux.MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			wrapper := &responseWriterWrapper{ResponseWriter: w, statusCode: http.StatusOK}
+			next.ServeHTTP(wrapper, r)
+			path, err := mux.CurrentRoute(r).GetPathTemplate()
+			if err != nil {
+				path = r.URL.Path
+			}
+			status := strconv.Itoa(wrapper.statusCode)
+			requestsIn.WithLabelValues(path, r.Method, status).Inc()
+			requestDuration.WithLabelValues(path, r.Method, status).Observe(time.Since(start).Seconds())
+		})
+	}
+}
+
+func (rw *responseWriterWrapper) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
 }
 
 func (book *guestbook) homeHandler(w http.ResponseWriter, r *http.Request) {

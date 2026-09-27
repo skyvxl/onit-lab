@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+
 	"onit_laba1/internal/datasource"
 	"onit_laba1/internal/web"
 )
@@ -32,11 +35,16 @@ func NewApp(ctx context.Context, logger *slog.Logger) (*app, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+	)
 	repo := datasource.NewRepository(pool)
 	return &app{
 		ctx:    ctx,
 		logger: logger,
-		server: web.NewServer(logger, repo),
+		server: web.NewServer(logger, repo, reg),
 		repo:   repo,
 	}, nil
 }

@@ -1,4 +1,4 @@
--include .env
+-include .env.dev
 export
 
 all: run-dev
@@ -12,11 +12,11 @@ run:
 run-dev:
 	go run cmd/server/main.go
 
-fmt:
-	go fmt ./...
-
 lint:
 	golangci-lint run
+
+lint-fix:
+	golangci-lint run --fix
 
 test:
 	go test ./...
@@ -27,4 +27,4 @@ migrate-up:
 migrate-down:
 	docker compose run --build --rm migrate down
 
-.PHONY: all build run run-dev fmt lint test migrate-up migrate-down
+.PHONY: all build run run-dev lint lint-fix test migrate-up migrate-down
