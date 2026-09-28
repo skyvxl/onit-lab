@@ -21,6 +21,7 @@ import (
 type MessageRepository interface {
 	GetMessages(context.Context) ([]string, error)
 	CreateMessage(context.Context, string) error
+	Ping(context.Context) error
 }
 
 type responseWriterWrapper struct {
@@ -75,11 +76,14 @@ func RegisterRoutes(r *mux.Router, logger *slog.Logger, repo MessageRepository, 
 		logger: logger,
 		repo:   repo,
 	}
+
+	r.HandleFunc("/health", book.healthHandler).Methods(http.MethodGet)
+	r.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+
 	apiRouter := r.NewRoute().Subrouter()
 	apiRouter.Use(metricsMiddleware(requestsIn, requestDuration))
 	apiRouter.HandleFunc("/", book.homeHandler).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/messages", book.messagesHandler).Methods(http.MethodPost)
-	r.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 }
 
 func metricsMiddleware(requestsIn *prometheus.CounterVec, requestDuration *prometheus.HistogramVec) mux.MiddlewareFunc {
@@ -160,4 +164,15 @@ func (book *guestbook) messagesHandler(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(map[string]string{"message": request.Message}); err != nil {
 		book.logger.WarnContext(r.Context(), "write response failed", "error", err)
 	}
+}
+
+func (book *guestbook) healthHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+	err := book.repo.Ping(ctx)
+	if err != nil {
+		http.Error(w, "не удалось подключиться к базе данных", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }

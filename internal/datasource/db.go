@@ -61,3 +61,7 @@ func (r *Repository) CreateMessage(ctx context.Context, text string) error {
 	}
 	return nil
 }
+
+func (r *Repository) Ping(ctx context.Context) error {
+	return r.pool.Ping(ctx)
+}

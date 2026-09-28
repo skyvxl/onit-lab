@@ -8,7 +8,13 @@ services:
     environment:
       SERVER_PORT: "8080"
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
-    restart: on-failure
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "-T", "2", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -39,6 +45,7 @@ services:
       interval: 3s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
 
   pgadmin:
     image: dpage/pgadmin4:9.18
@@ -52,6 +59,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:v3.14.0
@@ -62,6 +70,7 @@ services:
       - "127.0.0.1:9090:9090"
     depends_on:
       - my_backend
+    restart: unless-stopped
 
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
@@ -72,6 +81,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
 
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.60.6
@@ -80,6 +90,7 @@ services:
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker:/var/lib/docker:ro
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:13.2
@@ -92,7 +103,7 @@ services:
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
-
+    restart: unless-stopped
 
 volumes:
   postgres_data:
