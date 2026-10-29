@@ -1,0 +1,81 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  REGISTRY: localhost:3000
+  IMAGE: localhost:3000/${{ gitea.repository }}
+  # Jobs use the host network; the runner's internal URL http://gitea:3000 is not reachable here.
+  SERVER_URL: http://localhost:3000
+  REPOSITORY: ${{ gitea.repository }}
+  REVISION: ${{ gitea.sha }}
+
+jobs:
+  build:
+    runs-on: docker
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Checkout
+        run: |
+          apk add --no-cache git python3
+          git clone --no-checkout "$SERVER_URL/$REPOSITORY.git" .
+          git checkout "$REVISION"
+      - name: Tests
+        run: |
+          docker build --target test -f docker/Dockerfile.main .
+          python3 -m unittest discover -s tests -v
+      - name: Version
+        id: version
+        run: |
+          printf 'tag=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build images
+        if: gitea.event_name == 'push'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          docker build --build-arg APP_VERSION="$TAG" -t "$IMAGE:$TAG" -f docker/Dockerfile.main .
+          docker build -t "$IMAGE-migrate:$TAG" -f docker/Dockerfile.migrate .
+      - name: Publish
+        if: gitea.event_name == 'push'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          export DOCKER_CONFIG="$(mktemp -d)"
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE-migrate:$TAG"
+
+  deploy:
+    needs: build
+    if: gitea.event_name == 'push' && gitea.ref == 'refs/heads/main'
+    runs-on: docker
+    env:
+      TAG: ${{ needs.build.outputs.tag }}
+      REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+      REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      HTTP_PORT: ${{ secrets.HTTP_PORT }}
+    steps:
+      - name: Checkout
+        run: |
+          apk add --no-cache git python3
+          git clone --no-checkout "$SERVER_URL/$REPOSITORY.git" .
+          git checkout "$REVISION"
+      - name: Deploy healthy replicas
+        run: |
+          export DOCKER_CONFIG="$(mktemp -d)"
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+          export APP_IMAGE="$IMAGE:$TAG" MIGRATE_IMAGE="$IMAGE-migrate:$TAG"
+          docker pull "$APP_IMAGE"
+          docker pull "$MIGRATE_IMAGE"
+          sh deploy.sh

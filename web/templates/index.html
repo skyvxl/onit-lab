@@ -202,6 +202,13 @@
             background: #1b1b21;
         }
 
+        footer {
+            margin-top: 2rem;
+            color: var(--muted);
+            font-size: 0.6875rem;
+            overflow-wrap: anywhere;
+        }
+
         @media (max-width: 600px) {
             html {
                 padding-inline: 0.75rem;
@@ -268,6 +275,7 @@
     {{end}}
 </ul>
 {{end}}
+<footer>Версия: {{.Version}} · Реплика: {{.Hostname}}</footer>
 <script>
     const form = document.querySelector('form');
     const status = document.querySelector('#form-status');

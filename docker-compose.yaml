@@ -1,112 +1,83 @@
+name: guestbook
+
 services:
+  caddy:
+    image: ${CADDY_IMAGE:-guestbook-caddy:local}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.caddy
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-80}:80"
+    environment:
+      RATE_LIMIT_EVENTS: ${RATE_LIMIT_EVENTS:-5}
+      LB_POLICY: ${LB_POLICY:-round_robin}
+    networks: [frontend]
+    depends_on:
+      my_backend:
+        condition: service_healthy
+    restart: unless-stopped
+
   my_backend:
+    image: ${APP_IMAGE:-guestbook:local}
     build:
       context: .
       dockerfile: docker/Dockerfile.main
-    ports:
-      - "127.0.0.1:${SERVER_PORT}:8080"
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
     environment:
       SERVER_PORT: "8080"
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      DATABASE_URL: postgresql://${DB_USER:-guestbook}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-guestbook}
+    deploy:
+      replicas: 3
+    networks: [frontend, backend]
     restart: unless-stopped
+    stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "-T", "2", "http://127.0.0.1:8080/health"]
-      interval: 10s
+      interval: 3s
       timeout: 3s
       retries: 3
-      start_period: 10s
+      start_period: 5s
     depends_on:
       migrate:
         condition: service_completed_successfully
 
   migrate:
+    image: ${MIGRATE_IMAGE:-guestbook-migrate:local}
     build:
       context: .
       dockerfile: docker/Dockerfile.migrate
     environment:
       GOOSE_DRIVER: postgres
-      GOOSE_DBSTRING: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      GOOSE_DBSTRING: postgresql://${DB_USER:-guestbook}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-guestbook}
       GOOSE_MIGRATION_DIR: /migrations
+    networks: [backend]
     depends_on:
       postgres:
         condition: service_healthy
     command: ["up"]
+    restart: "no"
 
   postgres:
     image: postgres:18
     environment:
-      POSTGRES_USER: ${DB_USER}
+      POSTGRES_USER: ${DB_USER:-guestbook}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_DB: ${DB_NAME:-guestbook}
     volumes:
       - postgres_data:/var/lib/postgresql
+    networks: [backend]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 3s
       timeout: 3s
-      retries: 5
+      retries: 10
     restart: unless-stopped
 
-  pgadmin:
-    image: dpage/pgadmin4:9.18
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_LOGIN}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
-    ports:
-      - "127.0.0.1:5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus:v3.14.0
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    ports:
-      - "127.0.0.1:9090:9090"
-    depends_on:
-      - my_backend
-    restart: unless-stopped
-
-  postgres-exporter:
-    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
-    environment:
-      DATA_SOURCE_URI: "${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable"
-      DATA_SOURCE_USER: ${DB_USER}
-      DATA_SOURCE_PASS: ${DB_PASSWORD}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
-  cadvisor:
-    image: ghcr.io/google/cadvisor:v0.60.6
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:13.2
-    environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_LOGIN}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
-    ports:
-      - "127.0.0.1:3000:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
-    restart: unless-stopped
+networks:
+  frontend:
+  backend:
+    internal: true
 
 volumes:
   postgres_data:
-  pgadmin_data:
-  prometheus_data:
-  grafana_data:

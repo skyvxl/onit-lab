@@ -1,0 +1,17 @@
+runner:
+  file: /data/.runner
+  capacity: 1
+  timeout: 30m
+  labels:
+    - "docker:docker://docker:29.1.3-cli"
+
+container:
+  # Deployed Compose services must outlive the CI job that created them.
+  sweep: false
+  network: host
+  docker_host: ""
+  force_pull: false
+  valid_volumes: []
+
+cache:
+  enabled: false

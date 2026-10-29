@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -17,6 +18,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+// Set at build time with -ldflags "-X onit_laba1/internal/web.buildVersion=...".
+var buildVersion = "dev"
 
 type MessageRepository interface {
 	GetMessages(context.Context) ([]string, error)
@@ -32,11 +36,15 @@ type responseWriterWrapper struct {
 type PageData struct {
 	Title    string
 	Messages []string
+	Version  string
+	Hostname string
 }
 
 type guestbook struct {
-	logger *slog.Logger
-	repo   MessageRepository
+	logger   *slog.Logger
+	repo     MessageRepository
+	hostname string
+	version  string
 }
 
 func NewServer(logger *slog.Logger, repo MessageRepository, reg *prometheus.Registry) *http.Server {
@@ -57,6 +65,21 @@ func NewServer(logger *slog.Logger, repo MessageRepository, reg *prometheus.Regi
 }
 
 func RegisterRoutes(r *mux.Router, logger *slog.Logger, repo MessageRepository, reg *prometheus.Registry) {
+	version := strings.TrimSpace(os.Getenv("APP_VERSION"))
+	if version == "" {
+		version = strings.TrimSpace(buildVersion)
+	}
+	if version == "" {
+		version = "dev"
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		logger.Error("get hostname failed", "error", err)
+	}
+	hostname = strings.TrimSpace(hostname)
+	if hostname == "" {
+		hostname = "unknown"
+	}
 	factory := promauto.With(reg)
 	requestsIn := factory.NewCounterVec(
 		prometheus.CounterOpts{
@@ -73,9 +96,16 @@ func RegisterRoutes(r *mux.Router, logger *slog.Logger, repo MessageRepository, 
 		[]string{"path", "method", "status"},
 	)
 	book := &guestbook{
-		logger: logger,
-		repo:   repo,
+		logger:   logger,
+		repo:     repo,
+		hostname: hostname,
+		version:  version,
 	}
+	r.Use(book.metadataMiddleware)
+	r.NotFoundHandler = book.metadataMiddleware(http.NotFoundHandler())
+	r.MethodNotAllowedHandler = book.metadataMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+	}))
 
 	r.HandleFunc("/health", book.healthHandler).Methods(http.MethodGet)
 	r.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
@@ -84,6 +114,15 @@ func RegisterRoutes(r *mux.Router, logger *slog.Logger, repo MessageRepository, 
 	apiRouter.Use(metricsMiddleware(requestsIn, requestDuration))
 	apiRouter.HandleFunc("/", book.homeHandler).Methods(http.MethodGet)
 	apiRouter.HandleFunc("/messages", book.messagesHandler).Methods(http.MethodPost)
+	apiRouter.HandleFunc("/version", book.versionHandler).Methods(http.MethodGet)
+}
+
+func (book *guestbook) metadataMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Served-By", book.hostname)
+		w.Header().Set("X-App-Version", book.version)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func metricsMiddleware(requestsIn *prometheus.CounterVec, requestDuration *prometheus.HistogramVec) mux.MiddlewareFunc {
@@ -124,6 +163,8 @@ func (book *guestbook) homeHandler(w http.ResponseWriter, r *http.Request) {
 	data := PageData{
 		Title:    "Гостевая книга",
 		Messages: messages,
+		Version:  book.version,
+		Hostname: book.hostname,
 	}
 	var body bytes.Buffer
 	if err := tmpl.Execute(&body, data); err != nil {
@@ -158,7 +199,14 @@ func (book *guestbook) messagesHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "не удалось сохранить сообщение", http.StatusInternalServerError)
 		return
 	}
-	book.logger.InfoContext(r.Context(), "message added")
+	clientIP := strings.TrimSpace(r.Header.Get("X-Real-IP"))
+	if clientIP == "" {
+		clientIP, _, err = net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			clientIP = r.RemoteAddr
+		}
+	}
+	book.logger.InfoContext(r.Context(), "message added", "client_ip", clientIP)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(map[string]string{"message": request.Message}); err != nil {
@@ -174,5 +222,22 @@ func (book *guestbook) healthHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "не удалось подключиться к базе данных", http.StatusServiceUnavailable)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+		book.logger.WarnContext(r.Context(), "write health response failed", "error", err)
+	}
+}
+
+func (book *guestbook) versionHandler(w http.ResponseWriter, r *http.Request) {
+	var result struct {
+		Version string `json:"version"`
+		Host    string `json:"host"`
+	}
+	result.Version = book.version
+	result.Host = book.hostname
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		book.logger.WarnContext(r.Context(), "write response failed", "error", err)
+	}
 }

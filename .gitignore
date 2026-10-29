@@ -3,3 +3,7 @@ bin
 .env
 .env.*
 !.env.example
+**/.credentials.json
+**/__pycache__/
+.deploy/
+test-results/

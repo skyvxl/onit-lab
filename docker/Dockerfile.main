@@ -1,15 +1,22 @@
-FROM golang:1.27-bookworm AS builder
+FROM golang:1.27-bookworm AS source
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o main cmd/server/main.go
+FROM source AS test
+RUN go test ./...
 
-FROM alpine:3.24
+FROM source AS build
+ARG APP_VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags="-s -w -X onit_laba1/internal/web.buildVersion=${APP_VERSION}" \
+    -o /app/main ./cmd/server
+
+FROM alpine:3.24 AS prod
 WORKDIR /app
 RUN apk --no-cache add ca-certificates
-COPY --from=builder /app/main .
-COPY --from=builder /app/web/templates ./web/templates
+COPY --from=build /app/main .
+COPY --from=build /app/web/templates ./web/templates
 USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/app/main"]

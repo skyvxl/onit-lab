@@ -1,2 +1,8 @@
-.env
 .git
+.env
+.env.*
+!.env.example
+infra
+.deploy
+bin
+test-results

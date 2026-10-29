@@ -1,0 +1,35 @@
+{
+    auto_https off
+    admin localhost:2019
+    persist_config off
+}
+
+:80 {
+    log
+
+    rate_limit {
+        zone per_ip {
+            key {remote_host}
+            events {$RATE_LIMIT_EVENTS:5}
+            window 1s
+        }
+    }
+
+    reverse_proxy {
+        dynamic a my_backend 8080 {
+            refresh 2s
+            resolvers 127.0.0.11
+            versions ipv4
+        }
+        lb_policy {$LB_POLICY:round_robin}
+        lb_try_duration 3s
+        fail_duration 5s
+        unhealthy_status 502 503
+        header_up X-Real-IP {remote_host}
+        header_down X-Upstream {http.reverse_proxy.upstream.address}
+        transport http {
+            dial_timeout 1s
+            response_header_timeout 5s
+        }
+    }
+}

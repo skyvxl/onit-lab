@@ -1,0 +1,41 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Previous image tag (commit SHA or release version)
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    runs-on: docker
+    env:
+      REGISTRY: localhost:3000
+      IMAGE: localhost:3000/${{ gitea.repository }}
+      SERVER_URL: http://localhost:3000
+      REPOSITORY: ${{ gitea.repository }}
+      REVISION: ${{ gitea.sha }}
+      TAG: ${{ inputs.tag }}
+      REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+      REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      HTTP_PORT: ${{ secrets.HTTP_PORT }}
+    steps:
+      - name: Checkout and validate tag
+        run: |
+          apk add --no-cache git python3
+          git clone --no-checkout "$SERVER_URL/$REPOSITORY.git" .
+          git checkout "$REVISION"
+          python3 -c 'import os,re; assert re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", os.environ["TAG"]), "Invalid image tag"'
+      - name: Restore previous application image
+        run: |
+          export DOCKER_CONFIG="$(mktemp -d)"
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+          export APP_IMAGE="$IMAGE:$TAG" RUN_MIGRATIONS=0
+          docker pull "$APP_IMAGE"
+          sh deploy.sh
