@@ -37,5 +37,5 @@ jobs:
           trap 'rm -rf "$DOCKER_CONFIG"' EXIT
           printf '%s' "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
           export APP_IMAGE="$IMAGE:$TAG" RUN_MIGRATIONS=0
-          docker pull "$APP_IMAGE"
+          python3 scripts/registry.py pull "$APP_IMAGE"
           sh deploy.sh
