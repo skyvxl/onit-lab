@@ -12,12 +12,13 @@ env:
   SERVER_URL: http://localhost:3000
   REPOSITORY: ${{ gitea.repository }}
   REVISION: ${{ gitea.sha }}
+  # Read the public commit SHA directly in both jobs. Job outputs can be dropped
+  # by secret masking when a SHA happens to contain a short secret such as "80".
+  TAG: ${{ gitea.sha }}
 
 jobs:
   build:
     runs-on: docker
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Checkout
         run: |
@@ -28,21 +29,14 @@ jobs:
         run: |
           docker build --target test -f docker/Dockerfile.main .
           python3 -m unittest discover -s tests -v
-      - name: Version
-        id: version
-        run: |
-          printf 'tag=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Build images
         if: gitea.event_name == 'push'
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
         run: |
           docker build --build-arg APP_VERSION="$TAG" -t "$IMAGE:$TAG" -f docker/Dockerfile.main .
           docker build -t "$IMAGE-migrate:$TAG" -f docker/Dockerfile.migrate .
       - name: Publish
         if: gitea.event_name == 'push'
         env:
-          TAG: ${{ steps.version.outputs.tag }}
           REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
           REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
         run: |
@@ -57,7 +51,6 @@ jobs:
     if: gitea.event_name == 'push' && gitea.ref == 'refs/heads/main'
     runs-on: docker
     env:
-      TAG: ${{ needs.build.outputs.tag }}
       REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
       REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
       DB_USER: ${{ secrets.DB_USER }}
